@@ -25,6 +25,7 @@ This project is my way of exploring how difficult (or not) it is to build a simi
 ![image](https://github.com/user-attachments/assets/1592419f-81f6-4e6e-80a3-2c921e79aa29)
 ![image](https://github.com/user-attachments/assets/8b8e3c63-cc66-42e4-b864-0f47e3d14915)
 ![image](https://github.com/user-attachments/assets/08ef9205-15de-4427-8ba2-43307068bcbb)
+![image](https://github.com/user-attachments/assets/e0309ec6-413d-42f7-9bb3-a3b4ad19037b)
 
 
 ## ⚠️ Current Limitations
