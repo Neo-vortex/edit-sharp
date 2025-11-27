@@ -20,7 +20,7 @@ This project is my way of exploring how difficult (or not) it is to build a simi
 - 📊 Status bar shows encoding, line ending, line count, and character count
 
 - 
-![image](https://github.com/user-attachments/assets/bed1fa43-dd1b-47e6-b93e-ff6020c5b28e)
+
 ![image](https://github.com/user-attachments/assets/1592419f-81f6-4e6e-80a3-2c921e79aa29)
 ![image](https://github.com/user-attachments/assets/8b8e3c63-cc66-42e4-b864-0f47e3d14915)
 ![image](https://github.com/user-attachments/assets/08ef9205-15de-4427-8ba2-43307068bcbb)
