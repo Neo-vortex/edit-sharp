@@ -1,0 +1,159 @@
+name: Build, Test and Release
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PROJECT_NAME: 'edit-sharp'
+  PROJECT_PATH: 'edit-sharp/edit-sharp.csproj'
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact_name: edit-sharp-linux-x64
+          - os: macos-latest
+            runtime: osx-x64
+            artifact_name: edit-sharp-osx-x64
+          - os: windows-latest
+            runtime: win-x64
+            artifact_name: edit-sharp-win-x64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+
+    - name: Build
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
+
+    - name: Generate version number
+      id: version
+      shell: bash
+      run: |
+        BUILD_NUMBER=${{ github.run_number }}
+        VERSION="1.0.${BUILD_NUMBER}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Version: ${VERSION}"
+
+    - name: Publish ${{ matrix.runtime }}
+      run: |
+        dotnet publish ${{ env.PROJECT_PATH }} \
+          --configuration Release \
+          --runtime ${{ matrix.runtime }} \
+          --self-contained true \
+          --output ./publish/${{ matrix.artifact_name }} \
+          /p:Version=${{ steps.version.outputs.VERSION }} \
+          /p:PublishSingleFile=true \
+          /p:PublishReadyToRun=true \
+          /p:IncludeNativeLibrariesForSelfExtract=true \
+          /p:IncludeAllContentForSelfExtract=true
+
+    - name: Create archive (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd ./publish/${{ matrix.artifact_name }}
+        tar -czf ../${{ matrix.artifact_name }}-v${{ steps.version.outputs.VERSION }}.tar.gz *
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        cd ./publish/${{ matrix.artifact_name }}
+        Compress-Archive -Path * -DestinationPath ../${{ matrix.artifact_name }}-v${{ steps.version.outputs.VERSION }}.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.artifact_name }}-v${{ steps.version.outputs.VERSION }}
+        path: |
+          ./publish/${{ matrix.artifact_name }}-v${{ steps.version.outputs.VERSION }}.tar.gz
+          ./publish/${{ matrix.artifact_name }}-v${{ steps.version.outputs.VERSION }}.zip
+        retention-days: 7
+
+  create-release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate version number
+      id: version
+      run: |
+        BUILD_NUMBER=${{ github.run_number }}
+        VERSION="1.0.${BUILD_NUMBER}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "TAG=v${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R ./artifacts
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.TAG }}
+        name: Release ${{ steps.version.outputs.TAG }}
+        body: |
+          ## Edit Sharp ${{ steps.version.outputs.VERSION }}
+          
+          Automated release built from commit ${{ github.sha }}
+          
+          ### Downloads
+          - **Linux**: `edit-sharp-linux-x64-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **macOS**: `edit-sharp-osx-x64-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **Windows**: `edit-sharp-win-x64-${{ steps.version.outputs.TAG }}.zip`
+          
+          ### Installation
+          
+          **Linux/macOS:**
+          ```bash
+          tar -xzf edit-sharp-*-${{ steps.version.outputs.TAG }}.tar.gz
+          chmod +x edit-sharp
+          ./edit-sharp
+          ```
+          
+          **Windows:**
+          ```cmd
+          unzip edit-sharp-win-x64-${{ steps.version.outputs.TAG }}.zip
+          edit-sharp.exe
+          ```
+        draft: false
+        prerelease: false
+        files: |
+          ./artifacts/**/*.tar.gz
+          ./artifacts/**/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
