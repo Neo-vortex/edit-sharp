@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOTNET_VERSION: '10.0.x'
+  DOTNET_VERSION: '8.0.x'
   PROJECT_NAME: 'edit-sharp'
   PROJECT_PATH: 'edit-sharp/edit-sharp.csproj'
 
@@ -59,17 +59,7 @@ jobs:
         echo "Version: ${VERSION}"
 
     - name: Publish ${{ matrix.runtime }}
-      run: |
-        dotnet publish ${{ env.PROJECT_PATH }} \
-          --configuration Release \
-          --runtime ${{ matrix.runtime }} \
-          --self-contained true \
-          --output ./publish/${{ matrix.artifact_name }} \
-          /p:Version=${{ steps.version.outputs.VERSION }} \
-          /p:PublishSingleFile=true \
-          /p:PublishReadyToRun=true \
-          /p:IncludeNativeLibrariesForSelfExtract=true \
-          /p:IncludeAllContentForSelfExtract=true
+      run: dotnet publish ${{ env.PROJECT_PATH }} --configuration Release --runtime ${{ matrix.runtime }} --self-contained true --output ./publish/${{ matrix.artifact_name }} /p:Version=${{ steps.version.outputs.VERSION }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesForSelfExtract=true /p:IncludeAllContentForSelfExtract=true
 
     - name: Create archive (Linux/macOS)
       if: matrix.os != 'windows-latest'
