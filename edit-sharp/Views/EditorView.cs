@@ -19,6 +19,8 @@ public class EditorView : ITextEditor, IEditorHost
     private string _encoding = "Unknown";
     private string _lineCount = "Unknown";
     private string? _charCount = "Unknown";
+    private bool _programmaticChange = false; // Flag to track programmatic changes
+    private string _lastText = string.Empty; // Track last text state
 
     public EditorView(Window parentWindow)
     {
@@ -35,16 +37,8 @@ public class EditorView : ITextEditor, IEditorHost
             WordWrap = _wordWrap
         };
 
-        TextView.TextChanged += () =>
-        {
-            var content = TextView.Text.ToString();
-            _lineCount = TextView.Lines.ToString();
-            _charCount = content?.Length.ToString();
-            _hasUnsavedChanges = true;
-            TextChanged?.Invoke();
-            UpdateStatus($"Editing {Path.GetFileName(FilePath)} - Unsaved changes");
-            foreach (var plugin in _plugins) plugin.OnTextChanged(TextView.Text.ToString());
-        };
+        // Use KeyPress event instead of TextChanged for keyboard input detection
+        TextView.KeyPress += OnKeyPress;
 
         _parentWindow.Add(TextView);
 
@@ -62,13 +56,77 @@ public class EditorView : ITextEditor, IEditorHost
         _parentWindow.Add(_statusBar);
     }
 
+    private void OnKeyPress(View.KeyEventEventArgs args)
+    {
+        // Check if this is an actual text modification key
+        var key = args.KeyEvent.Key;
+        
+        // Filter out navigation and non-text keys
+        if (IsNavigationKey(key) || IsModifierOnlyKey(key))
+        {
+            return;
+        }
+
+        // Schedule the text change notification for after the key is processed
+        Application.MainLoop.AddTimeout(TimeSpan.FromMilliseconds(10), (_) =>
+        {
+            var currentText = TextView.Text.ToString();
+            if (currentText != _lastText && !_programmaticChange)
+            {
+                _lastText = currentText;
+                OnUserTextChanged();
+            }
+            return false; // Don't repeat
+        });
+    }
+
+    private bool IsNavigationKey(Key key)
+    {
+        var keyWithoutMods = key & ~(Key.CtrlMask | Key.ShiftMask | Key.AltMask);
+        
+        return keyWithoutMods switch
+        {
+            Key.CursorUp or Key.CursorDown or Key.CursorLeft or Key.CursorRight or
+            Key.Home or Key.End or Key.PageUp or Key.PageDown or
+            Key.F1 or Key.F2 or Key.F3 or Key.F4 or Key.F5 or
+            Key.F6 or Key.F7 or Key.F8 or Key.F9 or Key.F10 or
+            Key.F11 or Key.F12 or Key.Esc or Key.Tab => true,
+            _ => false
+        };
+    }
+
+    private bool IsModifierOnlyKey(Key key)
+    {
+        // Check if only modifier keys are pressed (Ctrl, Alt, Shift alone)
+        return key == Key.CtrlMask || key == Key.AltMask || key == Key.ShiftMask;
+    }
+
+    private void OnUserTextChanged()
+    {
+        var content = TextView.Text.ToString();
+        _lineCount = TextView.Lines.ToString();
+        _charCount = content?.Length.ToString();
+        _hasUnsavedChanges = true;
+        TextChanged?.Invoke();
+        UpdateStatus($"Editing {Path.GetFileName(FilePath)} - Unsaved changes");
+        
+        // Notify plugins
+        foreach (var plugin in _plugins)
+        {
+            plugin.OnTextChanged(content);
+        }
+    }
+
     public string? Text
     {
         get => TextView.Text.ToString();
         set
         {
+            _programmaticChange = true;
             TextView.Text = value;
+            _lastText = value ?? string.Empty;
             _hasUnsavedChanges = false;
+            _programmaticChange = false;
         }
     }
 
@@ -132,17 +190,41 @@ public class EditorView : ITextEditor, IEditorHost
             ShowError($"Error opening file: {ex.Message}");
         }
     }
+
     private static string DetectLineEnding(string content)
     {
-        var crlf = content.Split("\r\n").Length - 1;
-        var lf = content.Split("\n").Length - 1;
-        var cr = content.Split("\r").Length - 1;
+        if (string.IsNullOrEmpty(content))
+            return "Unknown";
 
-        if (crlf > 0 && crlf >= lf && crlf >= cr)
+        var crlfCount = 0;
+        var lfCount = 0;
+        var crCount = 0;
+
+        for (int i = 0; i < content.Length; i++)
+        {
+            if (content[i] == '\r')
+            {
+                if (i + 1 < content.Length && content[i + 1] == '\n')
+                {
+                    crlfCount++;
+                    i++; // Skip the \n
+                }
+                else
+                {
+                    crCount++;
+                }
+            }
+            else if (content[i] == '\n')
+            {
+                lfCount++;
+            }
+        }
+
+        if (crlfCount > 0 && crlfCount >= lfCount && crlfCount >= crCount)
             return "CRLF";
-        if (lf > 0 && lf >= cr)
+        if (lfCount > 0 && lfCount >= crCount)
             return "LF";
-        return cr > 0 ? "CR" : "Unknown";
+        return crCount > 0 ? "CR" : "Unknown";
     }
 
     public void SaveFile()
@@ -301,7 +383,8 @@ public class EditorView : ITextEditor, IEditorHost
     public event Action TextChanged;
     public event Action FileOpened;
     public event Action FileSaved;
-    public string CurrentFilePath { get; }
+    
+    public string CurrentFilePath => FilePath ?? string.Empty;
 
     public string? GetText()
     {
@@ -315,6 +398,6 @@ public class EditorView : ITextEditor, IEditorHost
 
     public void AddMenuItem(string menuPath, Action action)
     {
-
+        
     }
 }
