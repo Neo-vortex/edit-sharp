@@ -15,10 +15,8 @@ public class EditorView : ITextEditor, IEditorHost
     private readonly Label _statusBar;
     private bool _wordWrap = true;
     private readonly List<IEditorPlugin> _plugins;
-    private string _lineEnding = "Unknown";
-    private string _encoding = "Unknown";
-    private string _lineCount = "Unknown";
-    private string? _charCount = "Unknown";
+    private string? _detectedLineEnding = null; // Line ending from current editing session
+    private string _encoding = "UTF-8"; // Default encoding
     private bool _programmaticChange = false; // Flag to track programmatic changes
     private string _lastText = string.Empty; // Track last text state
 
@@ -104,16 +102,51 @@ public class EditorView : ITextEditor, IEditorHost
     private void OnUserTextChanged()
     {
         var content = TextView.Text.ToString();
-        _lineCount = TextView.Lines.ToString();
-        _charCount = content?.Length.ToString();
         _hasUnsavedChanges = true;
+        
+        // Detect line ending from user input
+        DetectLineEndingFromInput(content);
+        
         TextChanged?.Invoke();
-        UpdateStatus($"Editing {Path.GetFileName(FilePath)} - Unsaved changes");
+        UpdateWindowTitle();
+        UpdateStatus();
         
         // Notify plugins
         foreach (var plugin in _plugins)
         {
             plugin.OnTextChanged(content);
+        }
+    }
+
+    private void DetectLineEndingFromInput(string content)
+    {
+        if (string.IsNullOrEmpty(content))
+        {
+            _detectedLineEnding = null;
+            return;
+        }
+
+        // Only detect if we haven't detected yet or if content has line breaks
+        for (int i = 0; i < content.Length; i++)
+        {
+            if (content[i] == '\r')
+            {
+                if (i + 1 < content.Length && content[i + 1] == '\n')
+                {
+                    _detectedLineEnding = "CRLF";
+                    return;
+                }
+                else
+                {
+                    _detectedLineEnding = "CR";
+                    return;
+                }
+            }
+            else if (content[i] == '\n')
+            {
+                _detectedLineEnding = "LF";
+                return;
+            }
         }
     }
 
@@ -127,6 +160,8 @@ public class EditorView : ITextEditor, IEditorHost
             _lastText = value ?? string.Empty;
             _hasUnsavedChanges = false;
             _programmaticChange = false;
+            UpdateWindowTitle();
+            UpdateStatus(); // Update status after setting text
         }
     }
 
@@ -144,8 +179,11 @@ public class EditorView : ITextEditor, IEditorHost
 
         Text = string.Empty;
         FilePath = string.Empty;
+        _detectedLineEnding = null;
+        _encoding = "UTF-8";
         _hasUnsavedChanges = false;
-        UpdateStatus("New file created");
+        UpdateWindowTitle();
+        UpdateStatus();
     }
 
     public void OpenFile(string? path = null)
@@ -171,12 +209,11 @@ public class EditorView : ITextEditor, IEditorHost
                 var content = reader.ReadToEnd();
                 Text = content;
                 _encoding = reader.CurrentEncoding.EncodingName;
-                _lineCount = TextView.Lines.ToString();
-                _charCount = content.Length.ToString();
-                _lineEnding = DetectLineEnding(content);
+                _detectedLineEnding = DetectLineEndingFromFile(content);
                 FilePath = path;
                 _hasUnsavedChanges = false;
-                UpdateStatus($"Opened: {Path.GetFileName(path)}");
+                UpdateWindowTitle();
+                UpdateStatus();
                 FileOpened?.Invoke();
                 foreach (var plugin in _plugins) plugin.OnFileOpened(path);
             }
@@ -191,7 +228,7 @@ public class EditorView : ITextEditor, IEditorHost
         }
     }
 
-    private static string DetectLineEnding(string content)
+    private static string DetectLineEndingFromFile(string content)
     {
         if (string.IsNullOrEmpty(content))
             return "Unknown";
@@ -243,7 +280,8 @@ public class EditorView : ITextEditor, IEditorHost
         {
             File.WriteAllText(FilePath, Text);
             _hasUnsavedChanges = false;
-            UpdateStatus($"Saved: {Path.GetFileName(FilePath)}");
+            UpdateWindowTitle();
+            UpdateStatus();
             FileSaved?.Invoke();
         }
         catch (Exception ex)
@@ -281,8 +319,10 @@ public class EditorView : ITextEditor, IEditorHost
 
         Text = string.Empty;
         FilePath = string.Empty;
+        _detectedLineEnding = null;
         _hasUnsavedChanges = false;
-        UpdateStatus("File closed");
+        UpdateWindowTitle();
+        UpdateStatus();
     }
 
     public bool CheckUnsavedChanges()
@@ -358,13 +398,50 @@ public class EditorView : ITextEditor, IEditorHost
         MessageBox.ErrorQuery(50, 7, "Error", message, "OK");
     }
 
-    public void UpdateStatus(string message)
+    public void UpdateStatus(string? customMessage = null)
     {
         if (!_showStatusBar) return;
+
         var lineCount = TextView.Lines;
         var charCount = TextView.Text.Length;
+        var lineEnding = _detectedLineEnding ?? "---";
+        
+        // Build status parts
+        var parts = new List<string>();
+        
+        // Custom message or default status
+        if (!string.IsNullOrEmpty(customMessage))
+        {
+            parts.Add(customMessage);
+        }
+        else if (!string.IsNullOrEmpty(FilePath))
+        {
+            parts.Add(Path.GetFileName(FilePath));
+        }
+        else
+        {
+            parts.Add("Untitled");
+        }
+        
+        // Add stats
+        parts.Add($"Lines: {lineCount}");
+        parts.Add($"Chars: {charCount}");
+        parts.Add($"Encoding: {_encoding}");
+        parts.Add($"Line Ending: {lineEnding}");
+        
+        _statusBar.Text = string.Join(" | ", parts);
+    }
 
-        _statusBar.Text = $"{message} [Lines: {lineCount}, Chars: {charCount}, {_encoding}, {_lineEnding}]";
+    private void UpdateWindowTitle()
+    {
+        var fileName = string.IsNullOrEmpty(FilePath) ? "Untitled" : Path.GetFileName(FilePath);
+        var modifiedIndicator = _hasUnsavedChanges ? "● " : "";
+        _parentWindow.Title = $"{modifiedIndicator}{fileName} - Edit Sharp";
+    }
+
+    public void SetStatusMessage(string message)
+    {
+        UpdateStatus(message);
     }
 
     public T CreateDialog<T>(string title, int width, int height) where T : Dialog, new()
@@ -390,14 +467,10 @@ public class EditorView : ITextEditor, IEditorHost
     {
         return TextView.Text.ToString();
     }
-
-    public void SetStatusMessage(string message)
-    {
-        UpdateStatus(message);
-    }
+    
 
     public void AddMenuItem(string menuPath, Action action)
     {
-        
+       
     }
 }
