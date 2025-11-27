@@ -15,21 +15,17 @@ public class DialogPlugin : IEditorPlugin
 
     public void Initialize(IEditorHost host)
     {
-        _host = host;
-        var result = _host.CreateDialog<MyCustomDialog>("MyCustomDialog", 50, 50);
-        Application.Run(result);
+        
     }
 
     public void OnFileOpened(string filePath)
     {
-        var result = _host.CreateDialog<MyCustomDialog2>("MyCustomDialog", 50, 50);
-        Application.Run(result);
+        
     }
 
     public void OnTextChanged(string? newText)
     {        
-        var result = _host.CreateDialog<MyCustomDialog3>("MyCustomDialog", 50, 50);
-        Application.Run(result);
+       
     }
     
 }
