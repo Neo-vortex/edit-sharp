@@ -1,6 +1,8 @@
 # EditSharp
 
 A modern terminal-based text editor in C# inspired by [Microsoft's edit](https://github.com/microsoft/edit) — a similar project built in Rust.
+
+
 <img width="839" height="542" alt="image" src="https://github.com/user-attachments/assets/1eec3210-c66a-4c27-8614-5186bafcee8a" />
 <img width="845" height="552" alt="image" src="https://github.com/user-attachments/assets/3b7ed66c-18aa-4328-b823-1e41a37a3199" />
 <img width="847" height="547" alt="image" src="https://github.com/user-attachments/assets/f19468e3-32ed-4546-8850-5aa03e9bfda2" />
