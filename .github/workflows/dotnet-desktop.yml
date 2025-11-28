@@ -1,0 +1,256 @@
+name: Build, Test and Release
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  PROJECT_NAME: 'edit-sharp'
+  PROJECT_PATH: 'edit-sharp/edit-sharp.csproj'
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        build-type: [trimmed, full]
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+            artifact_base: edit-sharp-linux-x64
+          - os: macos-latest
+            runtime: osx-x64
+            artifact_base: edit-sharp-osx-x64
+          - os: windows-latest
+            runtime: win-x64
+            artifact_base: edit-sharp-win-x64
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore dependencies
+      run: dotnet restore ${{ env.PROJECT_PATH }}
+
+    - name: Build
+      run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+
+    - name: Run tests
+      run: dotnet test --configuration Release --no-build --verbosity normal
+
+    - name: Generate version number
+      id: version
+      shell: bash
+      run: |
+        BUILD_NUMBER=${{ github.run_number }}
+        VERSION="1.0.${BUILD_NUMBER}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Version: ${VERSION}"
+
+    - name: Set artifact name and configuration
+      id: artifact
+      shell: bash
+      run: |
+        if [ "${{ matrix.build-type }}" == "trimmed" ]; then
+          SUFFIX="trimmed-aot"
+          CONFIG="Release-Trimmed"
+        else
+          SUFFIX="full"
+          CONFIG="Release-Full"
+        fi
+        echo "ARTIFACT_NAME=${{ matrix.artifact_base }}-${SUFFIX}" >> $GITHUB_OUTPUT
+        echo "SUFFIX=${SUFFIX}" >> $GITHUB_OUTPUT
+        echo "CONFIG=${CONFIG}" >> $GITHUB_OUTPUT
+
+    - name: Publish ${{ matrix.runtime }} (${{ matrix.build-type }})
+      run: dotnet publish ${{ env.PROJECT_PATH }} --configuration ${{ steps.artifact.outputs.CONFIG }} --runtime ${{ matrix.runtime }} --self-contained true --output ./publish/${{ steps.artifact.outputs.ARTIFACT_NAME }} /p:Version=${{ steps.version.outputs.VERSION }} /p:PublishSingleFile=true /p:PublishReadyToRun=true /p:IncludeNativeLibrariesForSelfExtract=true /p:IncludeAllContentForSelfExtract=true
+
+    - name: Create archive (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        cd ./publish/${{ steps.artifact.outputs.ARTIFACT_NAME }}
+        tar -czf ../${{ steps.artifact.outputs.ARTIFACT_NAME }}-v${{ steps.version.outputs.VERSION }}.tar.gz *
+
+    - name: Create archive (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: pwsh
+      run: |
+        cd ./publish/${{ steps.artifact.outputs.ARTIFACT_NAME }}
+        Compress-Archive -Path * -DestinationPath ../${{ steps.artifact.outputs.ARTIFACT_NAME }}-v${{ steps.version.outputs.VERSION }}.zip
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.artifact.outputs.ARTIFACT_NAME }}-v${{ steps.version.outputs.VERSION }}
+        path: |
+          ./publish/${{ steps.artifact.outputs.ARTIFACT_NAME }}-v${{ steps.version.outputs.VERSION }}.tar.gz
+          ./publish/${{ steps.artifact.outputs.ARTIFACT_NAME }}-v${{ steps.version.outputs.VERSION }}.zip
+        retention-days: 7
+
+  create-release:
+    needs: build-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Generate version number
+      id: version
+      run: |
+        BUILD_NUMBER=${{ github.run_number }}
+        VERSION="1.0.${BUILD_NUMBER}"
+        echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+        echo "TAG=v${VERSION}" >> $GITHUB_OUTPUT
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R ./artifacts
+
+    - name: Create Release
+      id: create_release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.TAG }}
+        name: Release ${{ steps.version.outputs.TAG }}
+        body: |
+          ## Edit Sharp ${{ steps.version.outputs.VERSION }}
+          
+          Automated release built from commit ${{ github.sha }}
+          
+          ### 📦 Download Options
+          
+          We provide **two editions** of Edit Sharp, each available for **three platforms** (Linux, macOS, Windows):
+          
+          ---
+          
+          #### 🪶 Trimmed AOT Edition (Recommended for most users)
+          **Ultra-lightweight, blazing fast startup, no plugin support**
+          
+          **Features:**
+          - ✅ Native AOT compilation - instant startup
+          - ✅ Smallest file size (~5-10MB)
+          - ✅ No runtime dependencies
+          - ✅ All core editing features
+          - ❌ No plugin support
+          - ❌ No Command Palette
+          
+          **Downloads:**
+          - **Linux**: `edit-sharp-linux-x64-trimmed-aot-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **macOS**: `edit-sharp-osx-x64-trimmed-aot-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **Windows**: `edit-sharp-win-x64-trimmed-aot-${{ steps.version.outputs.TAG }}.zip`
+          
+          ---
+          
+          #### 🔌 Full Edition (For power users & plugin developers)
+          **Feature-complete with Lua & .NET plugin support**
+          
+          **Features:**
+          - ✅ Full Lua plugin support
+          - ✅ .NET plugin support
+          - ✅ Command Palette (Ctrl+Shift+P)
+          - ✅ Extensible with custom commands
+          - ✅ All core editing features
+          - ⚠️ Larger file size (~20-30MB)
+          - ⚠️ Slightly slower startup
+          
+          **Downloads:**
+          - **Linux**: `edit-sharp-linux-x64-full-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **macOS**: `edit-sharp-osx-x64-full-${{ steps.version.outputs.TAG }}.tar.gz`
+          - **Windows**: `edit-sharp-win-x64-full-${{ steps.version.outputs.TAG }}.zip`
+          
+          ---
+          
+          ### ⚡ Quick Comparison
+          
+          | Feature | Trimmed AOT | Full Edition |
+          |---------|-------------|--------------|
+          | Startup Speed | ⚡ Instant | 🚀 Fast |
+          | Plugins (Lua) | ❌ | ✅ |
+          | Plugins (.NET) | ❌ | ✅ |
+          | Command Palette | ❌ | ✅ |
+          | Core Editing | ✅ | ✅ |
+          | AOT Compiled | ✅ | ❌ |
+          
+          ---
+          
+          ### 🤔 Which version should I choose?
+          
+          **Choose Trimmed AOT if:**
+          - ✅ You want the fastest, lightest editor possible
+          - ✅ You don't need plugins or extensibility
+          - ✅ You value instant startup and minimal resource usage
+          - ✅ You just want a solid, simple text editor
+          
+          **Choose Full Edition if:**
+          - ✅ You want to use or develop plugins
+          - ✅ You need the Command Palette for quick actions
+          - ✅ You want text transformation, regex, and advanced features
+          - ✅ File size and startup time aren't critical
+          
+          ---
+          
+          ### 📖 Installation
+          
+          **Linux/macOS:**
+          ```bash
+          # Extract (choose your edition and platform)
+          tar -xzf edit-sharp-*-${{ steps.version.outputs.TAG }}.tar.gz
+          chmod +x edit-sharp
+          ./edit-sharp
+          ```
+          
+          **Windows:**
+          ```cmd
+          # Extract (choose your edition and platform)
+          unzip edit-sharp-win-x64-*-${{ steps.version.outputs.TAG }}.zip
+          edit-sharp.exe
+          ```
+          
+          ---
+          
+          ### 🔌 Plugin Development (Full Edition Only)
+          
+          To add Lua plugins, create a `plugins/` folder next to the executable and add `.lua` files.
+          
+          Example plugin:
+          ```lua
+          editor.registerCommand(
+            "example.hello",
+            "Say Hello",
+            "Examples",
+            function()
+              editor.showMessage("Hello", "Hello from plugin!")
+            end
+          )
+          ```
+          
+          Press `Ctrl+Shift+P` and type "hello" to run the command!
+          
+          Full plugin API documentation: [Coming Soon]
+        draft: false
+        prerelease: false
+        files: |
+          ./artifacts/**/*.tar.gz
+          ./artifacts/**/*.zip
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
