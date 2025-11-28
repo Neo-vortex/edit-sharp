@@ -208,11 +208,6 @@ MIT License - See LICENSE file
 - [ ] Undo/Redo support
 - [ ] Search/Replace UI (without plugins)
 
-## 📚 Documentation
-
-- [Plugin API Reference](docs/plugin-api.md)
-- [Building from Source](docs/building.md)
-- [Configuration Guide](docs/configuration.md)
 
 ## 💬 Support
 
