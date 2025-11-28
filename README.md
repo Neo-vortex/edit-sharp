@@ -4,6 +4,8 @@ A modern terminal-based text editor in C# inspired by [Microsoft's edit](https:/
 
 
 <img width="839" height="542" alt="image" src="https://github.com/user-attachments/assets/1eec3210-c66a-4c27-8614-5186bafcee8a" />
+<img width="671" height="450" alt="image" src="https://github.com/user-attachments/assets/181317af-3a66-4ce1-93cc-d5d3c28da58a" />
+
 <img width="845" height="552" alt="image" src="https://github.com/user-attachments/assets/3b7ed66c-18aa-4328-b823-1e41a37a3199" />
 <img width="847" height="547" alt="image" src="https://github.com/user-attachments/assets/f19468e3-32ed-4546-8850-5aa03e9bfda2" />
 <img width="846" height="560" alt="image" src="https://github.com/user-attachments/assets/18afa5da-b424-400c-be93-d69151e1e189" />
