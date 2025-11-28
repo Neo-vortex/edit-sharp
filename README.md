@@ -17,7 +17,7 @@ A modern terminal-based text editor in C# inspired by [Microsoft's edit](https:/
 ## 🎯 Quick Start
 
 ### Download
-Choose your edition from the [Releases](https://github.com/your-username/edit-sharp/releases) page:
+Choose your edition from the  [Releases](https://github.com/Neo-vortex/edit-sharp/releases) page:
 - **Trimmed AOT**: Ultra-lightweight, instant startup (~5-10MB)
 - **Full Edition**: Feature-complete with plugin support (~20-30MB)
 
