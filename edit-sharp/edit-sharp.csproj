@@ -3,18 +3,56 @@
     <PropertyGroup>
         <OutputType>Exe</OutputType>
         <TargetFramework>net10.0</TargetFramework>
-        <RootNamespace>edit_sharp</RootNamespace>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
+        <RootNamespace>edit_sharp</RootNamespace>
+    </PropertyGroup>
+
+
+    <ItemGroup>
+        <PackageReference Include="MoonSharp" Version="2.0.0" />
+    </ItemGroup>
+    
+    <!-- Trimmed AOT Configuration -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release-Trimmed'">
+        <PublishAot>true</PublishAot>
+        <PublishTrimmed>true</PublishTrimmed>
+        <TrimMode>full</TrimMode>
+        <EnableTrimAnalyzer>true</EnableTrimAnalyzer>
+        <SuppressTrimAnalysisWarnings>false</SuppressTrimAnalysisWarnings>
+        <DefineConstants>$(DefineConstants);TRIMMED_BUILD;NO_PLUGINS</DefineConstants>
+        <IsAotCompatible>true</IsAotCompatible>
+    </PropertyGroup>
+
+    <!-- Full Plugin Support Configuration -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release-Full'">
+        <PublishAot>false</PublishAot>
+        <PublishTrimmed>false</PublishTrimmed>
+        <DefineConstants>$(DefineConstants);FULL_BUILD;PLUGIN_SUPPORT</DefineConstants>
+    </PropertyGroup>
+
+    <!-- Standard Release (defaults to Full) -->
+    <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+        <PublishAot>false</PublishAot>
+        <PublishTrimmed>false</PublishTrimmed>
+        <DefineConstants>$(DefineConstants);FULL_BUILD;PLUGIN_SUPPORT</DefineConstants>
+        <DefineConstants>$(DefineConstants);FULL_BUILD;PLUGIN_SUPPORT</DefineConstants>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
+        <DefineConstants>$(DefineConstants);PLUGIN_SUPPORT;FULL_BUILD</DefineConstants>
     </PropertyGroup>
 
     <ItemGroup>
-      <PackageReference Include="Terminal.Gui" Version="1.19.0" />
+        <PackageReference Include="Terminal.Gui" Version="1.19.0" />
     </ItemGroup>
 
-    <ItemGroup>
-      <Folder Include="Core\Models\" />
-      <Folder Include="Core\Utilities\" />
+    <!-- Plugins only included in FULL builds -->
+    <ItemGroup Condition="'$(Configuration)' != 'Release-Trimmed'">
+        <Content Include="Plugins\Lua\**\*.*">
+            <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+            <ExcludeFromSingleFile>true</ExcludeFromSingleFile>
+        </Content>
     </ItemGroup>
 
 </Project>
